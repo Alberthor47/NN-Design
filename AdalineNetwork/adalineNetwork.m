@@ -1,47 +1,82 @@
-% Implementation of Perceptron Network (With learining)
-classdef perceptronNetwork
+% Implementation of ADALINE Network
+classdef adalineNetwork
     properties
         Weights
         Bias
         TransferFunction
+        Mode
     end
     
     methods
-        function obj = perceptronNetwork(number_of_neurons, input_size)
+        function obj = adalineNetwork(input_size, mode)
             % Constructor
-            obj.Weights = rand(number_of_neurons, input_size); % Build the Weight matrix, init with random values
-            obj.Bias = rand(number_of_neurons, 1); % Build the Bias vector, init with random values
-            obj.TransferFunction = @(x) hardlim(x); % TF in perceptron should always be hardlim (or hardlims)
+            obj.Weights = rand(1, input_size); % Initialize weights randomly
+            obj.Bias = rand(1); % Initialize to 0 for simplicity
+            obj.TransferFunction = @(x) purelin(x); % TF in adaline is linear
+            % Validate and set the mode
+            if nargin < 2
+                mode = 'classification'; % Default mode is regression
+            end
+            validatestring(mode, {'classification', 'regression'}, 'adalineNetwork', 'mode');
+            obj.Mode = mode;
         end
         
         function output = classify(obj, prototype)
             % Classify input using current weights and bias
-            net_input = obj.Weights * prototype + obj.Bias;
-            output = obj.TransferFunction(net_input);
+            if strcmp(obj.Mode, 'classification')
+                net_input = obj.Weights * prototype + obj.Bias;
+                output = sign(net_input); % Classification outputs -1 or 1
+            else
+                net_input = obj.Weights * prototype;
+                output = obj.TransferFunction(net_input); % Regression outputs raw linear value
+            end
         end
         
-        function [obj, stop_code] = train(obj, prototypes, max_epochs)
-            % Train perceptron using prototypes with a maximum epoch counter
+        function [obj, stop_code] = train(obj, prototypes, max_epochs, delta, error_threshold)
+            % Train ADALINE using prototypes with a maximum epoch counter and an error threshold.
+            if nargin < 5 % Default value for error_threshold if not provided
+                error_threshold = 1e-3; % Default threshold for MSE
+            end
+  
             epoch = 0; % Initialize epoch counter
-            stop_code = 1; % If trining is completed successfully stop code is 1
-            
-            while ~obj.correct(prototypes) && epoch < max_epochs
+            stop_code = 1; % If training is completed successfully stop code is 1
+            epoch_errors = []; % Training epoch error history
+            train_ready = 0;
+
+            while ~train_ready && epoch < max_epochs
                 epoch = epoch + 1; % Increment epoch counter
+                total_error = 0; % Initialize total error for the epoch
+
                 for i = 1:length(prototypes)
-                    input_v = prototypes{i}{1};
-                    target = prototypes{i}{2};
+                    input_v = prototypes{i}{1}; % Extract input vector
+                    target = prototypes{i}{2};   % Extract target value
                     
-                    classification = obj.classify(input_v);
+                    classification = obj.classify(input_v); % Get classification
+
+                    % Calculate error
+                    error = target - classification;
+                    total_error = total_error + sum(error.^2);
                     
-                    % Update weights and bias
-                    obj.Weights = obj.Weights + (target - classification) * input_v';
-                    obj.Bias = obj.Bias + (target - classification);
+                    % Update weights and bias using the error
+                    obj.Weights = obj.Weights + 2 * delta * error * input_v'; % Weight update
+                    obj.Bias = obj.Bias + 2 * delta * error; % Bias update
                 end
+
+                % Compute Mean Square Error
+                mse = total_error / length(prototypes);
+               
+                % Store mean squared error (MSE) for this epoch
+                epoch_errors = [epoch_errors, mse];
+
+                % Check if MSE is below the threshold
+                train_ready = mse < error_threshold;
             end
             
             % Plot results based on mode
-            if size(prototypes{1}{1}, 1) == 2
-                obj.plot_2D(prototypes); % Plot decision boundary if input is 2D for clasification
+            if strcmp(obj.Mode, 'classification') && size(prototypes{1}{1}, 1) == 2
+                obj.plot_2D_db(prototypes); % Plot decision boundary if input is 2D for clasification
+            elseif strcmp(obj.Mode, 'regression')
+                obj.plot_epoch_error(epoch_errors); % Plot error over epochs for regression
             end
 
             % Check if training stopped due to reaching max epochs
@@ -52,26 +87,8 @@ classdef perceptronNetwork
                 fprintf('Training completed successfully in %d epochs.\n', epoch);
             end
         end
-
-        function all_targets_meet = correct(obj, prototypes)
-            % Check if all classifications are correct
-            all_targets_meet = true;
-            for i = 1:length(prototypes)
-                input_v = prototypes{i}{1};
-                target = prototypes{i}{2};
-
-                % Get the classification result
-                classification = obj.classify(input_v);
-                
-                % Compare the classification with the target
-                if ~isequal(target, classification)
-                    all_targets_meet = false;
-                    return; % Exit early
-                end
-            end
-        end
-
-        function plot_2D(obj, prototypes)
+       
+        function plot_2D_db(obj, prototypes)
             % Initialize figure
             figure;
             hold on;
@@ -97,7 +114,7 @@ classdef perceptronNetwork
                 number_of_classes = size(target, 1) * 2;
 
                 if (number_of_classes == 2) 
-                    if isequal(target, 0)
+                    if isequal(target, -1)
                         class_index = 1; % Class 1
                     elseif isequal(target, 1)
                         class_index = 2; % Class 2
@@ -117,18 +134,18 @@ classdef perceptronNetwork
 
                 elseif (number_of_classes == 4)
                     % Determine class based on binary vector
-                    if isequal(target, [0; 0])
+                    if isequal(target, [-1; -1])
                         class_index = 1; % Class 1
-                    elseif isequal(target, [1; 0])
+                    elseif isequal(target, [1; -1])
                         class_index = 2; % Class 2
-                    elseif isequal(target, [0; 1])
+                    elseif isequal(target, [-1; 1])
                         class_index = 3; % Class 3
                     elseif isequal(target, [1; 1])
                         class_index = 4; % Class 4
                     end
 
                     % Calculate coordinates for decision boundary line
-                    x1_boundary = linspace(-2.6, 2.6, 100);
+                    x1_boundary = linspace(-2.6, 2.6, 100); 
                     y1_boundary = - (obj.Weights(1) / obj.Weights(2)) * x1_boundary - (obj.Bias(2) / obj.Weights(2)); 
                     y2_boundary = - (obj.Weights(3) / obj.Weights(4)) * x1_boundary - (obj.Bias(1) / obj.Weights(4)); 
 
@@ -149,5 +166,15 @@ classdef perceptronNetwork
 
             hold off;
         end
+   
+        function plot_epoch_error(obj, epoch_errors)
+            figure;
+            plot(1:length(epoch_errors), epoch_errors, 'b-', 'LineWidth', 2);
+            xlabel('Epoch');
+            ylabel('Mean Squared Error (MSE)');
+            title('Training Error Over Epochs');
+            grid on;
+        end
+            
     end
 end
