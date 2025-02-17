@@ -21,3 +21,6 @@ octave-workspace
 
 # Simulink autosave extension
 .autosave
+
+# NN Design Examples
+nndesign_2014b
